@@ -92,9 +92,11 @@ async function analyzeQuery(message) {
       1. El idioma del mensaje (código de 2 letras, ej: "es", "en")
       2. Si el mensaje es una consulta inmobiliaria que puedes responder (true/false)
       3. Si requiere atención humana (true/false)
+      4. Si es una pregunta sobre tus servicios o capacidades como asesor inmobiliario (true/false)
+      5. Si es una solicitud para analizar una imagen o propiedad (true/false)
       
       Responde solo con un objeto JSON con esta estructura exacta, sin markdown ni texto adicional:
-      {"language": "es", "isRealEstateQuery": true, "needsHuman": false}`,
+      {"language": "es", "isRealEstateQuery": true, "needsHuman": false, "isAboutServices": false, "isImageAnalysisRequest": false}`,
       system: "Eres un asistente que analiza mensajes para determinar su idioma y si son consultas inmobiliarias que puedes responder o requieren atención humana. Responde SOLO con JSON sin formato markdown."
     })
     
@@ -112,7 +114,9 @@ async function analyzeQuery(message) {
       return {
         language: "es",
         isRealEstateQuery: true,
-        needsHuman: false
+        needsHuman: false,
+        isAboutServices: false,
+        isImageAnalysisRequest: false
       };
     }
   } catch (error) {
@@ -121,7 +125,9 @@ async function analyzeQuery(message) {
     return {
       language: "es",
       isRealEstateQuery: true,
-      needsHuman: false
+      needsHuman: false,
+      isAboutServices: false,
+      isImageAnalysisRequest: false
     }
   }
 }
@@ -132,10 +138,10 @@ async function getAIResponse(prompt, language = "es") {
   
   const startTime = Date.now()
   try {
-    let systemPrompt = "Eres un asesor inmobiliario útil. Proporciona información concisa y precisa sobre propiedades, tendencias del mercado, consejos de compra/venta y oportunidades de inversión. Mantén las respuestas por debajo de 200 palabras.";
+    let systemPrompt = "Eres un asesor inmobiliario entusiasta y persuasivo. Tu objetivo es ayudar a los clientes a encontrar la propiedad perfecta y cerrar ventas. Proporciona información concisa y precisa sobre propiedades, tendencias del mercado, consejos de compra/venta y oportunidades de inversión. Mantén las respuestas por debajo de 200 palabras. Siempre muestra entusiasmo por ayudar al cliente a encontrar su hogar ideal.";
     
     if (language === "en") {
-      systemPrompt = "You are a helpful real estate advisor. Provide concise, accurate information about properties, market trends, buying/selling advice, and investment opportunities. Keep responses under 200 words.";
+      systemPrompt = "You are an enthusiastic and persuasive real estate advisor. Your goal is to help clients find the perfect property and close sales. Provide concise, accurate information about properties, market trends, buying/selling advice, and investment opportunities. Keep responses under 200 words. Always show enthusiasm for helping the client find their ideal home.";
     }
     
     const { text } = await generateText({
@@ -156,6 +162,71 @@ async function getAIResponse(prompt, language = "es") {
     } else {
       return "I'm sorry, I couldn't process your real estate question at the moment. Please try again later.";
     }
+  }
+}
+
+// Function to analyze an image of a property
+async function analyzePropertyImage(imageUrl, language = "es") {
+  logger.info('Analyzing property image', { imageUrl });
+  
+  const startTime = Date.now();
+  try {
+    let prompt = "";
+    if (language === "es") {
+      prompt = `Analiza esta imagen de una propiedad inmobiliaria. Describe sus características principales, estilo arquitectónico, condición aparente, y cualquier detalle destacable. Luego, ofrece una opinión profesional sobre su valor potencial y atractivo en el mercado actual. Sé entusiasta y persuasivo, como un verdadero asesor inmobiliario que quiere vender la propiedad.`;
+    } else {
+      prompt = `Analyze this real estate property image. Describe its main features, architectural style, apparent condition, and any notable details. Then, offer a professional opinion on its potential value and appeal in the current market. Be enthusiastic and persuasive, like a real estate advisor who wants to sell the property.`;
+    }
+    
+    const { text } = await generateText({
+      model: openai('gpt-4o'),
+      prompt: `${prompt}\n\nImagen URL: ${imageUrl}`,
+      system: language === "es" 
+        ? "Eres un asesor inmobiliario experto que analiza imágenes de propiedades. Proporciona descripciones detalladas y opiniones profesionales sobre el valor y potencial de las propiedades."
+        : "You are an expert real estate advisor who analyzes property images. Provide detailed descriptions and professional opinions on the value and potential of properties."
+    });
+    
+    const timeTaken = Date.now() - startTime;
+    logger.ai(`Análisis de imagen: ${imageUrl}`, text, timeTaken);
+    return text;
+  } catch (error) {
+    const timeTaken = Date.now() - startTime;
+    logger.error(`Image analysis failed after ${timeTaken}ms`, error);
+    
+    if (language === "es") {
+      return "Lo siento, no pude analizar la imagen de la propiedad en este momento. ¿Podrías proporcionarme más detalles sobre la propiedad que te interesa?";
+    } else {
+      return "I'm sorry, I couldn't analyze the property image at the moment. Could you provide me with more details about the property you're interested in?";
+    }
+  }
+}
+
+// Function to get services description based on language
+function getServicesDescription(language = "es") {
+  if (language === "es") {
+    return `¡Claro que puedo ayudarte! Como tu asesor inmobiliario virtual, puedo:
+
+🏠 Ayudarte a encontrar la casa de tus sueños al mejor precio
+🔍 Brindarte información sobre tendencias del mercado inmobiliario actual
+💰 Asesorarte sobre inversiones inmobiliarias rentables
+📝 Explicarte el proceso de compra/venta de propiedades
+🏙️ Informarte sobre las mejores zonas para vivir según tus necesidades
+💼 Orientarte sobre financiamiento y opciones hipotecarias
+🔎 Analizar imágenes de propiedades que te interesen
+
+¿En cuál de estos servicios estás más interesado? ¡Estoy aquí para ayudarte a encontrar tu propiedad ideal!`;
+  } else {
+    return `Of course I can help you! As your virtual real estate advisor, I can:
+
+🏠 Help you find your dream home at the best price
+🔍 Provide information on current real estate market trends
+💰 Advise you on profitable real estate investments
+📝 Explain the property buying/selling process
+🏙️ Inform you about the best areas to live based on your needs
+💼 Guide you on financing and mortgage options
+🔎 Analyze images of properties you're interested in
+
+Which of these services are you most interested in? I'm here to help you find your ideal property!`;
   }
 }
 
@@ -195,14 +266,7 @@ async function humanFlowDynamic(ctx, message, options = {}) {
     logger.error('flowDynamic function not available in context', { ctx });
     return;
   }
-  
-  // Calculate typing delay based on message length
-  const typingDelay = options.delay || getTypingDelay(message);
-  
-  logger.info('Adding human-like delay before response', { delay: typingDelay, messageLength: message.length });
-  
-  // Simulate typing
-  await delay(typingDelay);
+
   
   // Send the message
   return flowDynamic(message);
@@ -219,6 +283,9 @@ async function processAnyMessage(ctx, ctxFunctions) {
   
   logger.info('Processing message via processAnyMessage function', { from: ctx.from, message: ctx.body });
   
+  // Check if the message contains media (image)
+  const hasMedia = ctx.message && ctx.message.hasMedia;
+  
   // Analyze the query to determine language and if bot can handle it
   const analysis = await analyzeQuery(ctx.body);
   
@@ -230,6 +297,50 @@ async function processAnyMessage(ctx, ctxFunctions) {
   // Add initial delay to simulate reading the message
   await delay(getRandomDelay(1000, 2000));
   
+  // Handle image analysis if there's media
+  if (hasMedia) {
+    logger.info('Message contains media, attempting to analyze', { from: ctx.from });
+    try {
+      // Download the media
+      const media = await ctx.downloadMedia();
+      if (media) {
+        logger.info('Media downloaded successfully', { from: ctx.from, mediaType: media.mimetype });
+        
+        // Check if it's an image
+        if (media.mimetype.startsWith('image/')) {
+          await humanFlowDynamic({ flowDynamic }, analysis.language === "es" 
+            ? "Estoy analizando la imagen de la propiedad, dame un momento..." 
+            : "I'm analyzing the property image, give me a moment...");
+          
+          // Analyze the image (in a real implementation, you would pass the image data to OpenAI)
+          const imageAnalysis = await analyzePropertyImage(media.data, analysis.language);
+          await humanFlowDynamic({ flowDynamic }, imageAnalysis);
+          
+          // Add delay before follow-up question
+          await delay(getRandomDelay(1500, 2500));
+          await humanFlowDynamic({ flowDynamic }, getFollowUpMessage(analysis.language));
+          return;
+        }
+      }
+    } catch (error) {
+      logger.error('Error processing media', error);
+    }
+  }
+  
+  // Handle questions about services
+  if (analysis.isAboutServices) {
+    logger.info('User asking about services', { from: ctx.from });
+    await humanFlowDynamic({ flowDynamic }, getServicesDescription(analysis.language));
+    
+    // Add delay before follow-up question
+    await delay(getRandomDelay(1500, 2500));
+    await humanFlowDynamic({ flowDynamic }, analysis.language === "es" 
+      ? "¿En qué servicio específico estás interesado?" 
+      : "Which specific service are you interested in?");
+    return;
+  }
+  
+  // Handle regular real estate queries
   if (analysis.needsHuman) {
     logger.info('Query needs human assistance', { from: ctx.from });
     await humanFlowDynamic({ flowDynamic }, getHumanAssistanceMessage(analysis.language));
@@ -251,13 +362,15 @@ async function processAnyMessage(ctx, ctxFunctions) {
     await delay(getRandomDelay(1500, 2500));
     await humanFlowDynamic({ flowDynamic }, getFollowUpMessage(analysis.language));
   } else {
-    // If it's not a real estate query, provide a general response
-    logger.info('Non-real estate query', { from: ctx.from });
-    if (analysis.language === "es") {
-      await humanFlowDynamic({ flowDynamic }, "Soy un asistente especializado en bienes raíces. ¿Tienes alguna consulta inmobiliaria en la que pueda ayudarte?");
-    } else {
-      await humanFlowDynamic({ flowDynamic }, "I'm a specialized real estate assistant. Do you have any real estate queries I can help you with?");
-    }
+    // If it's not a real estate query, provide a general response about real estate services
+    logger.info('Non-real estate query, providing services info', { from: ctx.from });
+    await humanFlowDynamic({ flowDynamic }, getServicesDescription(analysis.language));
+    
+    // Add delay before follow-up
+    await delay(getRandomDelay(1500, 2500));
+    await humanFlowDynamic({ flowDynamic }, analysis.language === "es" 
+      ? "¿En qué puedo ayudarte específicamente con bienes raíces?" 
+      : "How can I specifically help you with real estate?");
   }
 }
 
@@ -282,8 +395,42 @@ const realEstateFlow = addKeyword(['bienes raices', 'inmobiliaria', 'real estate
         // Add delay to simulate reading
         await delay(getRandomDelay(1000, 2000));
         
+        // Check if the message contains media (image)
+        const hasMedia = ctx.message && ctx.message.hasMedia;
+        
+        if (hasMedia) {
+            logger.info('Message contains media, attempting to analyze', { from: ctx.from });
+            try {
+                // Download the media
+                const media = await ctx.downloadMedia();
+                if (media && media.mimetype.startsWith('image/')) {
+                    await humanFlowDynamic({ flowDynamic }, language === "es" 
+                        ? "Estoy analizando la imagen de la propiedad, dame un momento..." 
+                        : "I'm analyzing the property image, give me a moment...");
+                    
+                    // Analyze the image
+                    const imageAnalysis = await analyzePropertyImage(media.data, language);
+                    await humanFlowDynamic({ flowDynamic }, imageAnalysis);
+                    
+                    // Add delay before follow-up question
+                    await delay(getRandomDelay(1500, 2500));
+                    await humanFlowDynamic({ flowDynamic }, getFollowUpMessage(language));
+                    return;
+                }
+            } catch (error) {
+                logger.error('Error processing media', error);
+            }
+        }
+        
         // Analyze if the query needs human assistance
         const analysis = await analyzeQuery(ctx.body);
+        
+        // Handle questions about services
+        if (analysis.isAboutServices) {
+            logger.info('User asking about services', { from: ctx.from });
+            await humanFlowDynamic({ flowDynamic }, getServicesDescription(language));
+            return;
+        }
         
         if (analysis.needsHuman) {
             logger.info('Query needs human assistance', { from: ctx.from });
@@ -383,6 +530,7 @@ const discordFlow = addKeyword('doc').addAnswer(
 
 const welcomeFlow = addKeyword(['hi', 'hello', 'hola', 'buenos dias', 'buenas tardes', 'buenas noches'])
     .addAction(async (ctx, { flowDynamic, state }) => {
+      console.log(ctx)
         logger.info('New conversation started with greeting', { from: ctx.from, keyword: ctx.body });
         
         // Detect language
@@ -446,39 +594,42 @@ const fullSamplesFlow = addKeyword(['samples', 'ejemplos', utils.setEvent('SAMPL
         media: 'https://cdn.freesound.org/previews/728/728142_11861866-lq.mp3',
         delay: 2000
     })
-    .addAnswer(`Archivo desde URL`, {
-        media: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
-        delay: 2000
-    });
-
-// Create a flow that handles any message
-const anyMessageFlow = addKeyword('.*', { regex: true })
-    .addAction(async (ctx, { flowDynamic, state, gotoFlow }) => {
-        // Skip if it's a greeting or specific command that should be handled by other flows
-        const isGreeting = ['hi', 'hello', 'hola', 'buenos dias', 'buenas tardes', 'buenas noches']
-            .some(greeting => ctx.body.toLowerCase().includes(greeting));
-            
-        const isCommand = ['doc', 'inmobiliaria', 'real estate', 'bienes raices', 'samples', 'ejemplos']
-            .some(cmd => ctx.body.toLowerCase().includes(cmd));
-            
-        if (isGreeting || isCommand) {
-            logger.info('Skipping anyMessageFlow for greeting or command', { from: ctx.from });
-            return;
-        }
-        
-        logger.info('anyMessageFlow handling message', { from: ctx.from, message: ctx.body });
-        await processAnyMessage(ctx, { flowDynamic, state, gotoFlow });
-    });
+    .addAnswer(`¡Estos son algunos ejemplos de lo que puedo hacer!`);
 
 const main = async () => {
     logger.info('Starting Real Estate Advisor Bot', { port: PORT });
     
     try {
-        // Create a flow for the bot - order matters! Put anyMessageFlow last
-        const adapterFlow = createFlow([welcomeFlow, registerFlow, fullSamplesFlow, realEstateFlow, anyMessageFlow]);
+        // Create a flow for the bot - solo incluimos los flujos específicos
+        const adapterFlow = createFlow([welcomeFlow, registerFlow, fullSamplesFlow, realEstateFlow]);
         logger.info('Flow adapter created successfully');
         
-        const adapterProvider = createProvider(Provider);
+        const adapterProvider = createProvider(Provider, {
+            // Esta es la parte clave - configuramos el proveedor para manejar todos los mensajes
+            // que no coinciden con ningún flujo definido
+            businessLogic: async (ctx, { flowDynamic, state, gotoFlow, endFlow }) => {
+                // Saltamos si ya fue respondido o es un comando
+                if (ctx.answered || ctx.body.startsWith('/')) {
+                    return;
+                }
+                
+                // Verificamos si es un saludo o comando específico que debería ser manejado por otros flujos
+                const isGreeting = ['hi', 'hello', 'hola', 'buenos dias', 'buenas tardes', 'buenas noches']
+                    .some(greeting => ctx.body.toLowerCase().includes(greeting));
+                    
+                const isCommand = ['doc', 'inmobiliaria', 'real estate', 'bienes raices', 'samples', 'ejemplos']
+                    .some(cmd => ctx.body.toLowerCase().includes(cmd));
+                    
+                // Si es un saludo o comando, dejamos que los flujos específicos lo manejen
+                if (isGreeting || isCommand) {
+                    logger.info('Skipping businessLogic for greeting or command', { from: ctx.from });
+                    return;
+                }
+                
+                logger.info('Handling message via businessLogic', { from: ctx.from, message: ctx.body });
+                await processAnyMessage(ctx, { flowDynamic, state, gotoFlow, endFlow });
+            }
+        });
         logger.info('Provider adapter created successfully');
         
         const adapterDB = new Database({ filename: 'db.json' });
