@@ -11,9 +11,12 @@
   },
   "keywords": [],
   "dependencies": {
+    "@ai-sdk/openai": "^1.3.6",
     "@builderbot/bot": "1.2.5",
+    "@builderbot/database-json": "1.2.5",
     "@builderbot/provider-baileys": "1.2.5",
-    "@builderbot/database-json": "1.2.5"
+    "ai": "^4.2.10",
+    "dotenv": "^16.4.7"
   },
   "devDependencies": {
     "eslint-plugin-builderbot": "latest",
