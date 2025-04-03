@@ -321,11 +321,11 @@ async function processAnyMessage(ctx, ctxFunctions) {
   
   logger.info('Processing message via processAnyMessage function', { from: ctx.from, message: ctx.body });
   
-  // Verificar si el contacto está guardado - solo responder a contactos no guardados
+  // Verificar si el contacto está guardado - solo para logging, no bloqueamos la respuesta
+  // para depuración
   const contactSaved = await isContactSaved(ctx);
   if (contactSaved) {
-    logger.info('Ignoring message from saved contact', { from: ctx.from });
-    return;
+    logger.info('Contacto guardado detectado, pero continuando para depuración', { from: ctx.from });
   }
   
   // Verificar si ha pasado mucho tiempo desde el último mensaje (timeout)
@@ -463,165 +463,35 @@ async function processAnyMessage(ctx, ctxFunctions) {
   await updateLastMessageTime(state);
 }
 
-// Define realEstateFlow first so it can be referenced later
-const realEstateFlow = addKeyword(['bienes raices', 'inmobiliaria', 'real estate', 'propiedades', 'casa', 'departamento', 'terreno', utils.setEvent('REAL_ESTATE')])
-    .addAction(async (ctx, { flowDynamic, state, gotoFlow }) => {
-        // Verificar si el contacto está guardado - solo responder a contactos no guardados
-        const contactSaved = await isContactSaved(ctx);
-        if (contactSaved) {
-            logger.info('Ignoring message from saved contact in realEstateFlow', { from: ctx.from });
-            return;
-        }
-        
-        // Actualizar el timestamp del último mensaje
-        await updateLastMessageTime(state);
-        
-        // Detect language
-        const analysis = await analyzeQuery(ctx.body);
-        await state.update({ language: analysis.language });
-        
-        // Send welcome message in the appropriate language with delay
-        await humanFlowDynamic({ flowDynamic }, getWelcomeMessage(analysis.language));
-        
-        // Procesar el mensaje directamente
-        await processAnyMessage(ctx, { flowDynamic, state, gotoFlow });
-    });
+// Eliminamos los flujos específicos y usamos solo el flujo agnóstico
 
-const registerFlow = addKeyword(utils.setEvent('REGISTER_FLOW'))
-    .addAnswer(`¿Cuál es tu nombre?`, { capture: true, delay: 1000 }, async (ctx, { state }) => {
-        logger.info('User providing name', { from: ctx.from });
-        await state.update({ name: ctx.body });
-    })
-    .addAnswer('¿Cuál es tu edad?', { capture: true, delay: 1500 }, async (ctx, { state }) => {
-        logger.info('User providing age', { from: ctx.from, name: state.get('name') });
-        await state.update({ age: ctx.body });
-    })
-    .addAction(async (ctx, { flowDynamic, state }) => {
-        const name = state.get('name');
-        const age = state.get('age');
-        logger.info('Registration completed', { from: ctx.from, name, age });
-        
-        // Add delay before response
-        await delay(getRandomDelay(1500, 2500));
-        
-        await humanFlowDynamic({ flowDynamic }, `${name}, gracias por tu información. Tu edad: ${age}`);
-    });
-
-const discordFlow = addKeyword('doc').addAnswer(
-    ["Manejamos las siguientes propiedades",
-       "CASA EN VENTA VILLAS DE ANAHUAC Escobedo $4,750,000",
-"Casa Bosques de las misiones $12,500,000",
-"Terrenos bosques de las misiones 4,200,000",
-"Departamentos vivía roma TEC $4,000,000",
-"Quinta en venta Zuazua 3,700,000",
-"Departamento En Venta Zona Universidad 1,800,000",
-"Departamento En Venta Zona Anahuac 4,400,000",
-].join(
-        '\n'
-    ),
-    { capture: true, delay: 1500 },
-    async (ctx, { gotoFlow, flowDynamic }) => {
-        logger.info('User in documentation flow', { from: ctx.from, response: ctx.body });
-        
-        // Add delay to simulate reading
-        await delay(getRandomDelay(1000, 2000));
-        
-        if (ctx.body.toLocaleLowerCase().includes('sí') || ctx.body.toLocaleLowerCase().includes('si')) {
-            logger.info('User wants to continue to registration', { from: ctx.from });
-            return gotoFlow(registerFlow);
-        }
-        logger.info('User ending documentation flow', { from: ctx.from });
-        await humanFlowDynamic({ flowDynamic }, '¡Gracias!');
-        return;
-    }
-);
-
-const welcomeFlow = addKeyword(['hi', 'hello', 'hola', 'buenos dias', 'buenas tardes', 'buenas noches'])
-    .addAction(async (ctx, { flowDynamic, state }) => {
-      console.log(ctx)
-        logger.info('New conversation started with greeting', { from: ctx.from, keyword: ctx.body });
-        
-        // Detect language
-        const analysis = await analyzeQuery(ctx.body);
-        await state.update({ language: analysis.language });
-        
-        // Add delay before response
-        await delay(getRandomDelay(1000, 2000));
-        
-        // Send welcome message in the appropriate language
-        if (analysis.language === "es") {
-            await humanFlowDynamic({ flowDynamic }, `🙌 Hola, Soy Rafael. `);
-        } else {
-            await humanFlowDynamic({ flowDynamic }, `🙌 Hello, I'm Rafael. `);
-        }
-    })
-    .addAnswer(
-        [
-            'Puedo ayudarte a encotrar la propiedad ideal para ti.',
-        ].join('\n'),
-        { delay: 1500, capture: true },
-        async (ctx, { fallBack, gotoFlow, state, flowDynamic }) => {
-            const language = state.get('language') || "es";
-            logger.info('User initial choice', { from: ctx.from, choice: ctx.body });
-            
-            // Add delay to simulate reading
-            await delay(getRandomDelay(1000, 2000));
-            
-            if (ctx.body.toLocaleLowerCase().includes('doc')) {
-                logger.info('User selected documentation', { from: ctx.from });
-                return;
-            } else if (ctx.body.toLocaleLowerCase().includes('inmobiliaria') || 
-                       ctx.body.toLocaleLowerCase().includes('real estate') ||
-                       ctx.body.toLocaleLowerCase().includes('bienes raices')) {
-                logger.info('User selected real estate advisor', { from: ctx.from });
-                return gotoFlow(realEstateFlow);
-            } else {
-                // Process as a direct query
-                logger.info('Processing as direct query from welcome flow', { from: ctx.from, query: ctx.body });
-                await processAnyMessage(ctx, { flowDynamic, state, gotoFlow });
-                return;
-            }
-        },
-        [discordFlow, realEstateFlow]
-    );
-
-const fullSamplesFlow = addKeyword(['samples', 'ejemplos', utils.setEvent('SAMPLES')])
-    .addAction(async (ctx) => {
-        logger.info('User requested samples', { from: ctx.from });
-    })
-    .addAnswer(`💪 Te enviaré varios archivos...`, { delay: 1500 })
-    .addAnswer(`Imagen local`, { media: join(process.cwd(), 'assets', 'sample.png'), delay: 2000 })
-    .addAnswer(`Video desde URL`, {
-        media: 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYTJ0ZGdjd2syeXAwMjQ4aWdkcW04OWlqcXI3Ynh1ODkwZ25zZWZ1dCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/LCohAb657pSdHv0Q5h/giphy.mp4',
-        delay: 2500
-    })
-    .addAnswer(`Audio desde URL`, { 
-        media: 'https://cdn.freesound.org/previews/728/728142_11861866-lq.mp3',
-        delay: 2000
-    })
-    .addAnswer(`¡Estos son algunos ejemplos de lo que puedo hacer!`);
+// Eliminamos todos los flujos específicos basados en palabras clave
+// Ya que ahora usaremos un enfoque agnóstico que procesa cualquier mensaje
 
 const main = async () => {
     logger.info('Starting Real Estate Advisor Bot', { port: PORT });
     
     try {
-        // Create a flow for the bot - solo incluimos los flujos específicos
-        const adapterFlow = createFlow([welcomeFlow, registerFlow, fullSamplesFlow, realEstateFlow]);
-        logger.info('Flow adapter created successfully');
+        // Crear un flujo agnóstico que procese cualquier mensaje sin depender de palabras clave
+        // Usamos un patrón comodín que captura cualquier texto entrante
+        const agnosticFlow = addKeyword(['.*'], { regex: true })
+            .addAction(async (ctx, ctxFunctions) => {
+                logger.info('Procesando mensaje con flujo agnóstico', { from: ctx.from, message: ctx.body });
+                // Procesar cualquier mensaje directamente
+                await processAnyMessage(ctx, ctxFunctions);
+            });
+            
+        // Create a flow for the bot - solo incluimos el flujo agnóstico
+        const adapterFlow = createFlow([agnosticFlow]);
+        logger.info('Agnostic flow adapter created successfully');
         
         const adapterProvider = createProvider(Provider, {
-          // Esta es la parte clave - configuramos el proveedor para manejar todos los mensajes
-          // que no coinciden con ningún flujo definido
+          // Configuramos el proveedor como respaldo para manejar mensajes que no coinciden con el flujo principal
+          // Aunque ahora el flujo principal debería capturar todos los mensajes
           businessLogic: async (ctx, { flowDynamic, state, gotoFlow, endFlow }) => {
               // Saltamos si ya fue respondido o es un comando
               if (ctx.answered || ctx.body.startsWith('/')) {
-                  return;
-              }
-              
-              // Verificar si el contacto está guardado - solo responder a contactos no guardados
-              const contactSaved = await isContactSaved(ctx);
-              if (contactSaved) {
-                  logger.info('Ignoring message from saved contact in businessLogic', { from: ctx.from });
+                  logger.info('Mensaje ya respondido o es un comando, ignorando', { from: ctx.from });
                   return;
               }
               
@@ -631,7 +501,15 @@ const main = async () => {
                   return;
               }
               
-              logger.info('Handling message via businessLogic', { from: ctx.from, message: ctx.body });
+              // Verificar si el contacto está guardado - solo responder a contactos no guardados
+              // Nota: Esta verificación ahora es solo para logging, ya que la función isContactSaved
+              // ha sido modificada para retornar false temporalmente para depuración
+              const contactSaved = await isContactSaved(ctx);
+              if (contactSaved) {
+                  logger.info('Contacto guardado detectado en businessLogic, pero continuando para depuración', { from: ctx.from });
+              }
+              
+              logger.info('Handling message via businessLogic fallback', { from: ctx.from, message: ctx.body });
               await processAnyMessage(ctx, { flowDynamic, state, gotoFlow, endFlow });
             }
         });

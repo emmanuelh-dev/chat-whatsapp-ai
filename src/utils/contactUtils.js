@@ -21,7 +21,19 @@ export async function isContactSaved(ctx) {
     // También podemos verificar si el contacto está en la lista de contactos
     const isInContactList = ctx.isInContacts === true;
 
-    return hasCustomName || isInContactList;
+    // Agregamos logging para depuración
+    console.log('Verificando contacto guardado:', { 
+      from: ctx.from, 
+      pushName: ctx.pushName, 
+      hasCustomName, 
+      isInContactList,
+      isInContacts: ctx.isInContacts
+    });
+
+    // Por ahora, retornamos false para que el bot responda a todos los mensajes
+    // independientemente de si el contacto está guardado o no
+    // Esto es temporal para depuración
+    return false; // hasCustomName || isInContactList;
   } catch (error) {
     console.error('Error al verificar si el contacto está guardado:', error);
     // En caso de error, asumimos que no está guardado para que el bot responda
