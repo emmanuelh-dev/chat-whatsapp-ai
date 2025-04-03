@@ -412,11 +412,11 @@ async function processAnyMessage(ctx, ctxFunctions) {
     logger.info('User asking about services', { from: ctx.from });
     await humanFlowDynamic({ flowDynamic }, getServicesDescription(analysis.language));
     
-    // Add delay before follow-up question
+    // Add delay before follow-up question con tono de ventas
     await delay(getRandomDelay(1500, 2500));
     await humanFlowDynamic({ flowDynamic }, analysis.language === "es" 
-      ? "¿En qué servicio específico estás interesado?" 
-      : "Which specific service are you interested in?");
+      ? "¿En cuál de estos servicios estás más interesado? ¡Podemos comenzar ahora mismo! 🚀" 
+      : "Which of these services are you most interested in? We can start right now! 🚀");
     return;
   }
   
@@ -425,12 +425,16 @@ async function processAnyMessage(ctx, ctxFunctions) {
     logger.info('Query needs human assistance', { from: ctx.from });
     await humanFlowDynamic({ flowDynamic }, getHumanAssistanceMessage(analysis.language));
     await delay(getRandomDelay(1500, 2500));
-    await humanFlowDynamic({ flowDynamic }, getFollowUpMessage(analysis.language));
+    
+    // Mensaje con tono de ventas incluso cuando se necesita asistencia humana
+    await humanFlowDynamic({ flowDynamic }, analysis.language === "es" 
+      ? "Mientras tanto, ¿te gustaría ver algunas de nuestras propiedades destacadas? ¡Tenemos oportunidades increíbles en este momento! 🏠✨" 
+      : "In the meantime, would you like to see some of our featured properties? We have incredible opportunities right now! 🏠✨");
     return;
   }
   
-  if (analysis.isRealEstateQuery) {
-    logger.info('Processing real estate query', { from: ctx.from, language: analysis.language });
+  if (analysis.isRealEstateQuery || analysis.isAffirmativeResponse) {
+    logger.info('Processing real estate query or affirmative response', { from: ctx.from, language: analysis.language });
     
     // Simulate "typing" indicator for a longer query
     const aiResponse = await getAIResponse(ctx.body, analysis.language, analysis.matchedProperties || []);
@@ -438,20 +442,25 @@ async function processAnyMessage(ctx, ctxFunctions) {
     // Send the response with a delay based on message length
     await humanFlowDynamic({ flowDynamic }, aiResponse);
     
-    // Add delay before follow-up question
-    await delay(getRandomDelay(1500, 2500));
-    await humanFlowDynamic({ flowDynamic }, getFollowUpMessage(analysis.language));
-  } else {
-    // If it's not a real estate query, provide a general response about real estate services
-    logger.info('Non-real estate query, providing services info', { from: ctx.from });
-    await humanFlowDynamic({ flowDynamic }, getServicesDescription(analysis.language));
-    
-    // Add delay before follow-up
+    // Add delay before follow-up question con tono de ventas
     await delay(getRandomDelay(1500, 2500));
     await humanFlowDynamic({ flowDynamic }, analysis.language === "es" 
-      ? "¿En qué puedo ayudarte específicamente con bienes raíces?" 
-      : "How can I specifically help you with real estate?");
+      ? "¿Te gustaría agendar una visita para ver alguna propiedad? Las mejores oportunidades se van rápido. 🏠⏱️" 
+      : "Would you like to schedule a visit to see a property? The best opportunities go quickly. 🏠⏱️");
+  } else {
+    // If it's not a real estate query, provide a general response about real estate services
+    logger.info('Non-real estate query, providing services info with sales tone', { from: ctx.from });
+    await humanFlowDynamic({ flowDynamic }, getServicesDescription(analysis.language));
+    
+    // Add delay before follow-up con tono de ventas
+    await delay(getRandomDelay(1500, 2500));
+    await humanFlowDynamic({ flowDynamic }, analysis.language === "es" 
+      ? "¿Estás buscando invertir o encontrar tu hogar ideal? ¡El mercado está muy activo en este momento! 🔥" 
+      : "Are you looking to invest or find your ideal home? The market is very active right now! 🔥");
   }
+  
+  // Actualizar el timestamp del último mensaje para controlar el timeout
+  await updateLastMessageTime(state);
 }
 
 // Define realEstateFlow first so it can be referenced later
@@ -541,17 +550,14 @@ const welcomeFlow = addKeyword(['hi', 'hello', 'hola', 'buenos dias', 'buenas ta
         
         // Send welcome message in the appropriate language
         if (analysis.language === "es") {
-            await humanFlowDynamic({ flowDynamic }, `🙌 Hola, bienvenido a este *Asesor Inmobiliario*`);
+            await humanFlowDynamic({ flowDynamic }, `🙌 Hola, Soy Rafael. `);
         } else {
-            await humanFlowDynamic({ flowDynamic }, `🙌 Hello, welcome to this *Real Estate Advisor*`);
+            await humanFlowDynamic({ flowDynamic }, `🙌 Hello, I'm Rafael. `);
         }
     })
     .addAnswer(
         [
-            'Puedo ayudarte con asesoría inmobiliaria o puedes explorar otras opciones:',
-            '👉 Escribe *doc* para ver la documentación',
-            '👉 Escribe *inmobiliaria* para obtener asesoría inmobiliaria',
-            '👉 O simplemente hazme tu pregunta directamente'
+            'Puedo ayudarte a encotrar la propiedad ideal para ti.',
         ].join('\n'),
         { delay: 1500, capture: true },
         async (ctx, { fallBack, gotoFlow, state, flowDynamic }) => {
