@@ -6,6 +6,10 @@ import { generateText } from 'ai'
 import { openai } from '@ai-sdk/openai'
 import dotenv from 'dotenv'
 
+// Importar utilidades personalizadas
+import { isContactSaved, hasTimedOut, updateLastMessageTime } from './utils/contactUtils.js'
+import { searchPropertiesInText, formatPropertyResults, getFullInventoryMessage } from './utils/propertyUtils.js'
+
 // Load environment variables
 dotenv.config()
 
@@ -48,6 +52,9 @@ function getRandomDelay(min = 1000, max = 3000) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
+// Configuración de timeout para conversaciones inactivas (en minutos)
+const CONVERSATION_TIMEOUT = 30;
+
 // Function to simulate typing time based on message length
 function getTypingDelay(message) {
   // Average typing speed: ~40 words per minute, or ~200 characters per minute
@@ -82,6 +89,10 @@ async function analyzeQuery(message) {
   const startTime = Date.now()
   
   try {
+    // Buscar propiedades en el mensaje
+    const matchedProperties = searchPropertiesInText(message);
+    const hasPropertyMatch = matchedProperties.length > 0;
+    
     const { text } = await generateText({
       model: openai('gpt-4o'),
       prompt: `Analiza el siguiente mensaje y responde en formato JSON:
@@ -94,9 +105,10 @@ async function analyzeQuery(message) {
       3. Si requiere atención humana (true/false)
       4. Si es una pregunta sobre tus servicios o capacidades como asesor inmobiliario (true/false)
       5. Si es una solicitud para analizar una imagen o propiedad (true/false)
+      6. Si es una consulta sobre propiedades específicas o inventario (true/false)
       
       Responde solo con un objeto JSON con esta estructura exacta, sin markdown ni texto adicional:
-      {"language": "es", "isRealEstateQuery": true, "needsHuman": false, "isAboutServices": false, "isImageAnalysisRequest": false}`,
+      {"language": "es", "isRealEstateQuery": true, "needsHuman": false, "isAboutServices": false, "isImageAnalysisRequest": false, "isInventoryQuery": false}`,
       system: "Eres un asistente que analiza mensajes para determinar su idioma y si son consultas inmobiliarias que puedes responder o requieren atención humana. Responde SOLO con JSON sin formato markdown."
     })
     
@@ -107,7 +119,13 @@ async function analyzeQuery(message) {
       // Clean the JSON string before parsing
       const cleanedJson = cleanJsonString(text);
       logger.info('Cleaned JSON', { cleanedJson });
-      return JSON.parse(cleanedJson);
+      const result = JSON.parse(cleanedJson);
+      
+      // Añadir información sobre propiedades encontradas
+      result.hasPropertyMatch = hasPropertyMatch;
+      result.matchedProperties = matchedProperties;
+      
+      return result;
     } catch (parseError) {
       logger.error('Error parsing JSON response from OpenAI', parseError);
       logger.error('Raw response', { text });
@@ -116,7 +134,10 @@ async function analyzeQuery(message) {
         isRealEstateQuery: true,
         needsHuman: false,
         isAboutServices: false,
-        isImageAnalysisRequest: false
+        isImageAnalysisRequest: false,
+        isInventoryQuery: false,
+        hasPropertyMatch: hasPropertyMatch,
+        matchedProperties: matchedProperties
       };
     }
   } catch (error) {
@@ -127,14 +148,17 @@ async function analyzeQuery(message) {
       isRealEstateQuery: true,
       needsHuman: false,
       isAboutServices: false,
-      isImageAnalysisRequest: false
+      isImageAnalysisRequest: false,
+      isInventoryQuery: false,
+      hasPropertyMatch: false,
+      matchedProperties: []
     }
   }
 }
 
 // OpenAI helper function with language support
-async function getAIResponse(prompt, language = "es") {
-  logger.info('Sending request to OpenAI', { promptLength: prompt.length, language })
+async function getAIResponse(prompt, language = "es", matchedProperties = []) {
+  logger.info('Sending request to OpenAI', { promptLength: prompt.length, language, hasMatchedProperties: matchedProperties.length > 0 })
   
   const startTime = Date.now()
   try {
@@ -144,9 +168,23 @@ async function getAIResponse(prompt, language = "es") {
       systemPrompt = "You are an enthusiastic and persuasive real estate advisor. Your goal is to help clients find the perfect property and close sales. Provide concise, accurate information about properties, market trends, buying/selling advice, and investment opportunities. Keep responses under 200 words. Always show enthusiasm for helping the client find their ideal home.";
     }
     
+    // Si hay propiedades coincidentes, las incluimos en el contexto
+    let enhancedPrompt = prompt;
+    if (matchedProperties && matchedProperties.length > 0) {
+      const propertiesContext = matchedProperties.map(p => 
+        `${p.title} - ${p.location} - Precio: ${p.price} - Tipo: ${p.type} - ${p.description || ''}`
+      ).join('\n');
+      
+      if (language === "es") {
+        enhancedPrompt = `Consulta del cliente: "${prompt}"\n\nTengo las siguientes propiedades que coinciden con la consulta:\n${propertiesContext}\n\nPor favor, responde a la consulta del cliente mencionando estas propiedades específicas.`;
+      } else {
+        enhancedPrompt = `Client query: "${prompt}"\n\nI have the following properties that match the query:\n${propertiesContext}\n\nPlease respond to the client's query mentioning these specific properties.`;
+      }
+    }
+    
     const { text } = await generateText({
       model: openai('gpt-4o'),
-      prompt: prompt,
+      prompt: enhancedPrompt,
       system: systemPrompt
     })
     
@@ -283,6 +321,24 @@ async function processAnyMessage(ctx, ctxFunctions) {
   
   logger.info('Processing message via processAnyMessage function', { from: ctx.from, message: ctx.body });
   
+  // Verificar si el contacto está guardado - solo responder a contactos no guardados
+  const contactSaved = await isContactSaved(ctx);
+  if (contactSaved) {
+    logger.info('Ignoring message from saved contact', { from: ctx.from });
+    return;
+  }
+  
+  // Verificar si ha pasado mucho tiempo desde el último mensaje (timeout)
+  if (await hasTimedOut(ctx, state, CONVERSATION_TIMEOUT)) {
+    logger.info('Conversation timed out, resetting state', { from: ctx.from });
+    if (state && state.update) {
+      await state.update({ lastMessageTime: Date.now() });
+    }
+  } else {
+    // Actualizar el timestamp del último mensaje
+    await updateLastMessageTime(state);
+  }
+  
   // Check if the message contains media (image)
   const hasMedia = ctx.message && ctx.message.hasMedia;
   
@@ -327,6 +383,30 @@ async function processAnyMessage(ctx, ctxFunctions) {
     }
   }
   
+  // Manejar consultas sobre el inventario de propiedades
+  if (analysis.isInventoryQuery || analysis.hasPropertyMatch) {
+    logger.info('User asking about property inventory', { 
+      from: ctx.from, 
+      matchedProperties: analysis.matchedProperties?.length || 0 
+    });
+    
+    if (analysis.matchedProperties && analysis.matchedProperties.length > 0) {
+      // Mostrar propiedades específicas que coinciden con la consulta
+      const propertiesMessage = formatPropertyResults(analysis.matchedProperties, analysis.language);
+      await humanFlowDynamic({ flowDynamic }, propertiesMessage);
+    } else {
+      // Mostrar inventario completo
+      await humanFlowDynamic({ flowDynamic }, getFullInventoryMessage(analysis.language));
+    }
+    
+    // Add delay before follow-up question
+    await delay(getRandomDelay(1500, 2500));
+    await humanFlowDynamic({ flowDynamic }, analysis.language === "es" 
+      ? "¿Te interesa alguna propiedad en particular?" 
+      : "Are you interested in any particular property?");
+    return;
+  }
+  
   // Handle questions about services
   if (analysis.isAboutServices) {
     logger.info('User asking about services', { from: ctx.from });
@@ -353,7 +433,7 @@ async function processAnyMessage(ctx, ctxFunctions) {
     logger.info('Processing real estate query', { from: ctx.from, language: analysis.language });
     
     // Simulate "typing" indicator for a longer query
-    const aiResponse = await getAIResponse(ctx.body, analysis.language);
+    const aiResponse = await getAIResponse(ctx.body, analysis.language, analysis.matchedProperties || []);
     
     // Send the response with a delay based on message length
     await humanFlowDynamic({ flowDynamic }, aiResponse);
@@ -376,115 +456,26 @@ async function processAnyMessage(ctx, ctxFunctions) {
 
 // Define realEstateFlow first so it can be referenced later
 const realEstateFlow = addKeyword(['bienes raices', 'inmobiliaria', 'real estate', 'propiedades', 'casa', 'departamento', 'terreno', utils.setEvent('REAL_ESTATE')])
-    .addAction(async (ctx, { flowDynamic, state }) => {
+    .addAction(async (ctx, { flowDynamic, state, gotoFlow }) => {
+        // Verificar si el contacto está guardado - solo responder a contactos no guardados
+        const contactSaved = await isContactSaved(ctx);
+        if (contactSaved) {
+            logger.info('Ignoring message from saved contact in realEstateFlow', { from: ctx.from });
+            return;
+        }
+        
+        // Actualizar el timestamp del último mensaje
+        await updateLastMessageTime(state);
+        
         // Detect language
         const analysis = await analyzeQuery(ctx.body);
         await state.update({ language: analysis.language });
         
         // Send welcome message in the appropriate language with delay
         await humanFlowDynamic({ flowDynamic }, getWelcomeMessage(analysis.language));
-    })
-    .addAnswer('', { capture: true, delay: 1000 }, async (ctx, { flowDynamic, state }) => {
-        const language = state.get('language') || "es";
-        logger.info('Received real estate question', { 
-          from: ctx.from, 
-          question: ctx.body,
-          language
-        });
         
-        // Add delay to simulate reading
-        await delay(getRandomDelay(1000, 2000));
-        
-        // Check if the message contains media (image)
-        const hasMedia = ctx.message && ctx.message.hasMedia;
-        
-        if (hasMedia) {
-            logger.info('Message contains media, attempting to analyze', { from: ctx.from });
-            try {
-                // Download the media
-                const media = await ctx.downloadMedia();
-                if (media && media.mimetype.startsWith('image/')) {
-                    await humanFlowDynamic({ flowDynamic }, language === "es" 
-                        ? "Estoy analizando la imagen de la propiedad, dame un momento..." 
-                        : "I'm analyzing the property image, give me a moment...");
-                    
-                    // Analyze the image
-                    const imageAnalysis = await analyzePropertyImage(media.data, language);
-                    await humanFlowDynamic({ flowDynamic }, imageAnalysis);
-                    
-                    // Add delay before follow-up question
-                    await delay(getRandomDelay(1500, 2500));
-                    await humanFlowDynamic({ flowDynamic }, getFollowUpMessage(language));
-                    return;
-                }
-            } catch (error) {
-                logger.error('Error processing media', error);
-            }
-        }
-        
-        // Analyze if the query needs human assistance
-        const analysis = await analyzeQuery(ctx.body);
-        
-        // Handle questions about services
-        if (analysis.isAboutServices) {
-            logger.info('User asking about services', { from: ctx.from });
-            await humanFlowDynamic({ flowDynamic }, getServicesDescription(language));
-            return;
-        }
-        
-        if (analysis.needsHuman) {
-            logger.info('Query needs human assistance', { from: ctx.from });
-            await humanFlowDynamic({ flowDynamic }, getHumanAssistanceMessage(language));
-        } else {
-            // Get response from OpenAI
-            const aiResponse = await getAIResponse(ctx.body, language);
-            
-            // Send the AI response back to the user with typing delay
-            logger.info('Sending AI response to user', { 
-              to: ctx.from, 
-              responseLength: aiResponse.length 
-            });
-            await humanFlowDynamic({ flowDynamic }, aiResponse);
-        }
-        
-        // Add delay before follow-up
-        await delay(getRandomDelay(1500, 2500));
-        
-        // Ask if they want to continue
-        await humanFlowDynamic({ flowDynamic }, getFollowUpMessage(language));
-    })
-    .addAnswer('', { capture: true, delay: 1000 }, async (ctx, { gotoFlow, flowDynamic, state, endFlow }) => {
-        const language = state.get('language') || "es";
-        logger.info('User follow-up response', { 
-          from: ctx.from, 
-          response: ctx.body 
-        });
-        
-        // Add delay to simulate reading
-        await delay(getRandomDelay(800, 1500));
-        
-        const response = ctx.body.toLowerCase();
-        const isAffirmative = language === "es" 
-            ? response.includes('sí') || response.includes('si') || response.includes('claro')
-            : response.includes('yes') || response.includes('yeah') || response.includes('sure');
-        
-        if (isAffirmative) {
-            logger.info('User wants to continue with real estate questions', { from: ctx.from });
-            if (language === "es") {
-                await humanFlowDynamic({ flowDynamic }, "¿Qué más te gustaría saber sobre bienes raíces?");
-            } else {
-                await humanFlowDynamic({ flowDynamic }, "What else would you like to know about real estate?");
-            }
-            return gotoFlow(realEstateFlow);
-        } else {
-            logger.info('User ending real estate conversation', { from: ctx.from });
-            if (language === "es") {
-                await humanFlowDynamic({ flowDynamic }, "¡Gracias por usar nuestro Asesor Inmobiliario! Escribe cualquier consulta inmobiliaria cuando lo necesites.");
-            } else {
-                await humanFlowDynamic({ flowDynamic }, "Thank you for using our Real Estate Advisor! Type any real estate query whenever you need assistance.");
-            }
-            return endFlow();
-        }
+        // Procesar el mensaje directamente
+        await processAnyMessage(ctx, { flowDynamic, state, gotoFlow });
     });
 
 const registerFlow = addKeyword(utils.setEvent('REGISTER_FLOW'))
@@ -508,7 +499,15 @@ const registerFlow = addKeyword(utils.setEvent('REGISTER_FLOW'))
     });
 
 const discordFlow = addKeyword('doc').addAnswer(
-    ['Puedes ver la documentación aquí', '📄 https://builderbot.app/docs \n', '¿Quieres continuar? *sí*'].join(
+    ["Manejamos las siguientes propiedades",
+       "CASA EN VENTA VILLAS DE ANAHUAC Escobedo $4,750,000",
+"Casa Bosques de las misiones $12,500,000",
+"Terrenos bosques de las misiones 4,200,000",
+"Departamentos vivía roma TEC $4,000,000",
+"Quinta en venta Zuazua 3,700,000",
+"Departamento En Venta Zona Universidad 1,800,000",
+"Departamento En Venta Zona Anahuac 4,400,000",
+].join(
         '\n'
     ),
     { capture: true, delay: 1500 },
@@ -605,29 +604,29 @@ const main = async () => {
         logger.info('Flow adapter created successfully');
         
         const adapterProvider = createProvider(Provider, {
-            // Esta es la parte clave - configuramos el proveedor para manejar todos los mensajes
-            // que no coinciden con ningún flujo definido
-            businessLogic: async (ctx, { flowDynamic, state, gotoFlow, endFlow }) => {
-                // Saltamos si ya fue respondido o es un comando
-                if (ctx.answered || ctx.body.startsWith('/')) {
-                    return;
-                }
-                
-                // Verificamos si es un saludo o comando específico que debería ser manejado por otros flujos
-                const isGreeting = ['hi', 'hello', 'hola', 'buenos dias', 'buenas tardes', 'buenas noches']
-                    .some(greeting => ctx.body.toLowerCase().includes(greeting));
-                    
-                const isCommand = ['doc', 'inmobiliaria', 'real estate', 'bienes raices', 'samples', 'ejemplos']
-                    .some(cmd => ctx.body.toLowerCase().includes(cmd));
-                    
-                // Si es un saludo o comando, dejamos que los flujos específicos lo manejen
-                if (isGreeting || isCommand) {
-                    logger.info('Skipping businessLogic for greeting or command', { from: ctx.from });
-                    return;
-                }
-                
-                logger.info('Handling message via businessLogic', { from: ctx.from, message: ctx.body });
-                await processAnyMessage(ctx, { flowDynamic, state, gotoFlow, endFlow });
+          // Esta es la parte clave - configuramos el proveedor para manejar todos los mensajes
+          // que no coinciden con ningún flujo definido
+          businessLogic: async (ctx, { flowDynamic, state, gotoFlow, endFlow }) => {
+              // Saltamos si ya fue respondido o es un comando
+              if (ctx.answered || ctx.body.startsWith('/')) {
+                  return;
+              }
+              
+              // Verificar si el contacto está guardado - solo responder a contactos no guardados
+              const contactSaved = await isContactSaved(ctx);
+              if (contactSaved) {
+                  logger.info('Ignoring message from saved contact in businessLogic', { from: ctx.from });
+                  return;
+              }
+              
+              // Verificar si el mensaje está vacío
+              if (!ctx.body || ctx.body.trim() === '') {
+                  logger.info('Ignoring empty message', { from: ctx.from });
+                  return;
+              }
+              
+              logger.info('Handling message via businessLogic', { from: ctx.from, message: ctx.body });
+              await processAnyMessage(ctx, { flowDynamic, state, gotoFlow, endFlow });
             }
         });
         logger.info('Provider adapter created successfully');
