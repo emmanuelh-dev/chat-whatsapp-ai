@@ -183,7 +183,7 @@ async function getAIResponse(prompt, language = "es", matchedProperties = []) {
     }
     
     const { text } = await generateText({
-      model: openai('gpt-4o-mini-2024-07-18-mini-2024-07-18'),
+      model: openai('gpt-4o-mini-2024-07-18'),
       prompt: enhancedPrompt,
       system: systemPrompt
     })
