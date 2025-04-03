@@ -94,7 +94,7 @@ async function analyzeQuery(message) {
     const hasPropertyMatch = matchedProperties.length > 0;
     
     const { text } = await generateText({
-      model: openai('gpt-4o-mini-2024-07-18'),
+      model: openai('gpt-4o-mini'),
       prompt: `Analiza el siguiente mensaje y responde en formato JSON:
       
       Mensaje: "${message}"
@@ -183,7 +183,7 @@ async function getAIResponse(prompt, language = "es", matchedProperties = []) {
     }
     
     const { text } = await generateText({
-      model: openai('gpt-4o-mini-2024-07-18'),
+      model: openai('gpt-4o-mini'),
       prompt: enhancedPrompt,
       system: systemPrompt
     })
@@ -217,7 +217,7 @@ async function analyzePropertyImage(imageUrl, language = "es") {
     }
     
     const { text } = await generateText({
-      model: openai('gpt-4o-mini-2024-07-18'),
+      model: openai('gpt-4o-mini'),
       prompt: `${prompt}\n\nImagen URL: ${imageUrl}`,
       system: language === "es" 
         ? "Eres un asesor inmobiliario experto que analiza imágenes de propiedades. Proporciona descripciones detalladas y opiniones profesionales sobre el valor y potencial de las propiedades."
@@ -625,7 +625,7 @@ const main = async () => {
         // Log startup complete
         logger.info('Real Estate Advisor Bot is now running', { 
             port: PORT, 
-            openaiModel: 'gpt-4o-mini-2024-07-18',
+            openaiModel: 'gpt-4o-mini',
             time: new Date().toISOString() 
         });
         
