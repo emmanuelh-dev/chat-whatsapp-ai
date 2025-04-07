@@ -5,6 +5,7 @@
       "name": "base-bailey-json",
       "dependencies": {
         "@ai-sdk/openai": "^1.3.6",
+        "@bot-whatsapp/bot": "^0.1.38",
         "@builderbot/bot": "1.2.5",
         "@builderbot/database-json": "1.2.5",
         "@builderbot/provider-baileys": "1.2.5",
@@ -32,6 +33,8 @@
     "@ai-sdk/ui-utils": ["@ai-sdk/ui-utils@1.2.4", "", { "dependencies": { "@ai-sdk/provider": "1.1.0", "@ai-sdk/provider-utils": "2.2.3", "zod-to-json-schema": "^3.24.1" }, "peerDependencies": { "zod": "^3.23.8" } }, "sha512-wLTxEZrKZRyBmlVZv8nGXgLBg5tASlqXwbuhoDu0MhZa467ZFREEnosH/OC/novyEHTQXko2zC606xoVbMrUcA=="],
 
     "@arr/every": ["@arr/every@1.0.1", "", {}, "sha512-UQFQ6SgyJ6LX42W8rHCs8KVc0JS0tzVL9ct4XYedJukskYVWTo49tNiMEK9C2HTyarbNiT/RVIRSY82vH+6sTg=="],
+
+    "@bot-whatsapp/bot": ["@bot-whatsapp/bot@0.1.38", "", { "dependencies": { "dotenv": "^16.0.3" } }, "sha512-M1FDbsgkn+03zss3zen0w2BdQytOEcHLXAkJZP8qU6w22B1B6nOw0871o/LqKzIaiLS7paSEc/6rDr3reYl84g=="],
 
     "@builderbot/bot": ["@builderbot/bot@1.2.5", "", { "dependencies": { "@ffmpeg-installer/ffmpeg": "^1.1.0", "body-parser": "^1.20.2", "cors": "^2.8.5", "fluent-ffmpeg": "^2.1.2", "follow-redirects": "^1.15.6", "mime-types": "^2.1.35", "picocolors": "^1.0.0", "polka": "^0.5.2" }, "optionalDependencies": { "sharp": "0.33.3" } }, "sha512-QONG0BFoT2d/bRmQ0kRSXHyrwbwlWYxk1gT3QRVsQQv9nFs7nNNzTQtMVavTh9KyP0DOlN7ojsP5H1Nan9bPzg=="],
 
