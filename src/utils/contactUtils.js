@@ -82,3 +82,10 @@ export async function updateLastMessageTime(state) {
   }
 }
 
+
+
+export function getTypingDelay(text) {
+  const baseDelay = 500;
+ const calculatedDelay = Math.min((text.length * 125) / 8, 3000);
+ return baseDelay + calculatedDelay;
+}
