@@ -54,9 +54,9 @@ async function getAIResponse(userId, prompt) {
     let systemPrompt = `Eres un asesor inmobiliario entusiasta y persuasivo. Tu objetivo es ayudar a los clientes a encontrar la propiedad perfecta.
 
     Reglas importantes:
-    1. Proporciona información concisa y precisa sobre propiedades
-    2. Mantén las respuestas por debajo de 200 palabras
-    3. Evita repetir la misma frase de introducción en cada mensaje
+    1. Proporciona información directa y al grano, no des muchas vueltas, solo responde con la información que te pidan
+    2. Mantén las respuestas lo mas cortas posibles
+    3. Evita repetir la misma frase de introducción en cada mensaje, solo responde lo que te solicitan
     4. Personaliza tus respuestas basándote en el historial de la conversación
     5. Muestra entusiasmo pero mantén un tono profesional
     6. Si el cliente ya mencionó sus preferencias, no preguntes por ellas de nuevo
@@ -67,7 +67,7 @@ async function getAIResponse(userId, prompt) {
     ${JSON.stringify(properties)}`;
 
     const { text } = await generateText({
-      model: openai("gpt-4o"),
+      model: openai("gpt-4o-mini"),
       prompt: contextualPrompt,
       system: systemPrompt,
     });
@@ -474,7 +474,7 @@ const main = async () => {
     // Log startup complete
     logger.info("Real Estate Advisor Bot is now running", {
       port: PORT,
-      openaiModel: "gpt-4o",
+      openaiModel: "gpt-4o-mini",
       time: new Date().toISOString(),
     });
 
