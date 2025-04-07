@@ -162,6 +162,8 @@ async function analyzePropertyImageWithAI(imageData, userMessage) {
 }
 
 async function processAnyMessage(ctx, ctxFunctions) {
+  console.log("processAnyMessage" + ctx)
+
   const { flowDynamic } = ctxFunctions;
   const userId = ctx.from;
   
@@ -169,8 +171,8 @@ async function processAnyMessage(ctx, ctxFunctions) {
     logger.error('flowDynamic function not available', { ctxFunctions });
     return;
   }
-  
   logger.info('Processing message', { from: userId, message: ctx.body });
+  logger.info("Message", {ctx})
 
   // Check if the message contains media (image)
   const hasMedia = ctx.message && ctx.message.hasMedia;
@@ -209,18 +211,11 @@ async function processAnyMessage(ctx, ctxFunctions) {
   }
 }
 
-// Define el flujo principal - IMPORTANTE: Ya no incluye la respuesta adicional
-const realEstateFlow = addKeyword(['bienes raices', 'inmobiliaria', 'propiedades', 'casa', 'departamento', 'terreno', utils.setEvent('REAL_ESTATE')])
-  .addAction(async (ctx, { flowDynamic, state }) => {
-    await updateLastMessageTime(state);
-    
-    // Procesar el mensaje directamente
-    await processAnyMessage(ctx, { flowDynamic, state });
-  });
-
 // Flujo de bienvenida - CORREGIDO para eliminar la respuesta duplicada
 const welcomeFlow = addKeyword(EVENTS.WELCOME)
   .addAction(async (ctx, { flowDynamic, state }) => {
+    console.log("addKeyword"+ctx)
+
     // Si es primer mensaje, enviamos saludo
     if (!conversationManager.getHistory(ctx.from).length) {
       await humanFlowDynamic({ flowDynamic }, MESSAGES.welcome);
@@ -241,6 +236,7 @@ const main = async () => {
     const adapterProvider = createProvider(Provider, {
       // Configuración para manejar todos los mensajes que no coinciden con ningún flujo
       businessLogic: async (ctx, { flowDynamic, state, gotoFlow, endFlow }) => {
+        console.log(ctx)
         // Saltamos si ya fue respondido o es un comando
         if (ctx.answered || ctx.body.startsWith('/')) {
           return;
