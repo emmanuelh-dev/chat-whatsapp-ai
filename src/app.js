@@ -15,7 +15,7 @@ import { properties } from "./data/properties.js";
 import { logger } from "./utils/logger.js";
 import { getTypingDelay } from "./utils/contactUtils.js";
 import ConversationManager from "./ConversationManager.js";
-
+import { blacklist } from "./data/blacklist.js";
 // Load environment variables
 dotenv.config();
 
@@ -30,7 +30,7 @@ const MESSAGES = {
   error:
     "Lo siento, tuve un problema al procesar tu mensaje. ¿Podrías intentarlo de nuevo?",
 };
-// Instancia global del administrador de conversaciones
+
 const conversationManager = new ConversationManager();
 
 // OpenAI helper function with conversation history
@@ -87,7 +87,6 @@ async function getAIResponse(userId, prompt) {
   }
 }
 
-
 async function humanFlowDynamic(ctx, message, options = {}) {
   const { flowDynamic } = ctx;
 
@@ -123,6 +122,17 @@ async function processAnyMessage(ctx, ctxFunctions) {
     logger.error("flowDynamic function not available", { ctxFunctions });
     return;
   }
+
+  // Verificar si el usuario está en la blacklist
+  if (ctx.blacklist && ctx.blacklist.includes(userId)) {
+    logger.info("Ignoring message from blacklisted user", { from: userId });
+    return;
+  }
+
+  if (ctx.from in blacklist) {
+    return;
+  }
+
   logger.info("Processing message", { from: userId, message: ctx.body });
   logger.info("Message", { ctx });
 
@@ -176,6 +186,15 @@ const welcomeFlow = addKeyword(EVENTS.WELCOME).addAction(
   async (ctx, { flowDynamic, state }) => {
     console.log("addKeyword" + ctx);
 
+    const userNumber = ctx.from.slice(-10);
+    if (blacklist.includes(userNumber)) {
+      logger.info("Ignoring message from blacklisted user", {
+        from: ctx.from,
+        matchedNumber: userNumber,
+      });
+      return;
+    }
+
     // Si es primer mensaje, enviamos saludo
     // if (!conversationManager.getHistory(ctx.from).length) {
     //   await humanFlowDynamic({ flowDynamic }, MESSAGES.welcome);
@@ -194,12 +213,119 @@ const main = async () => {
     const adapterFlow = createFlow([welcomeFlow]);
     logger.info("Flow adapter created successfully");
 
+    // Lista de números de administradores que pueden usar comandos
+    const ADMIN_NUMBERS = [
+      "123456789", // Reemplaza con números reales de administradores
+      // Agrega más números según sea necesario
+    ];
+
+    // Función para procesar comandos de administrador
+    async function processAdminCommands(ctx, ctxFunctions) {
+      const { flowDynamic } = ctxFunctions;
+      const userId = ctx.from;
+      const message = ctx.body;
+      const bot = ctx.bot || ctxFunctions.bot;
+
+      // Verificar si el usuario es administrador
+      if (!ADMIN_NUMBERS.includes(userId)) {
+        return false;
+      }
+
+      // Comando para agregar un número a la blacklist: /block 1234567890
+      if (message.startsWith("/block ")) {
+        const numberToBlock = message.split(" ")[1];
+        if (numberToBlock && numberToBlock.length > 8) {
+          bot.blacklist.add(numberToBlock);
+          await humanFlowDynamic(
+            { flowDynamic },
+            `Número ${numberToBlock} agregado a la blacklist.`
+          );
+          logger.info("Admin added number to blacklist", {
+            admin: userId,
+            blocked: numberToBlock,
+          });
+          return true;
+        } else {
+          await humanFlowDynamic(
+            { flowDynamic },
+            "Formato incorrecto. Usa /block número"
+          );
+          return true;
+        }
+      }
+
+      // Comando para eliminar un número de la blacklist: /unblock 1234567890
+      if (message.startsWith("/unblock ")) {
+        const numberToUnblock = message.split(" ")[1];
+        if (numberToUnblock && numberToUnblock.length > 8) {
+          bot.blacklist.remove(numberToUnblock);
+          await humanFlowDynamic(
+            { flowDynamic },
+            `Número ${numberToUnblock} eliminado de la blacklist.`
+          );
+          logger.info("Admin removed number from blacklist", {
+            admin: userId,
+            unblocked: numberToUnblock,
+          });
+          return true;
+        } else {
+          await humanFlowDynamic(
+            { flowDynamic },
+            "Formato incorrecto. Usa /unblock número"
+          );
+          return true;
+        }
+      }
+
+      // Comando para ver la blacklist: /blacklist
+      if (message === "/blacklist") {
+        const blacklist = bot.blacklist.getAll();
+        const response =
+          blacklist.length > 0
+            ? `Números en blacklist:\n${blacklist.join("\n")}`
+            : "La blacklist está vacía.";
+        await humanFlowDynamic({ flowDynamic }, response);
+        return true;
+      }
+
+      return false;
+    }
+
+    // Modificar el businessLogic para procesar comandos
     const adapterProvider = createProvider(Provider, {
       // Configuración para manejar todos los mensajes que no coinciden con ningún flujo
       businessLogic: async (ctx, { flowDynamic, state, gotoFlow, endFlow }) => {
         console.log(ctx);
+        // Verificar si es un comando de administrador
+        if (
+          ctx.body &&
+          ctx.body.startsWith("/") &&
+          (await processAdminCommands(ctx, {
+            flowDynamic,
+            state,
+            gotoFlow,
+            endFlow,
+            bot: ctx.bot,
+          }))
+        ) {
+          return;
+        }
+
         // Saltamos si ya fue respondido o es un comando
-        if (ctx.answered || ctx.body.startsWith("/")) {
+        if (
+          ctx.answered ||
+          (ctx.body &&
+            ctx.body.startsWith("/") &&
+            !ADMIN_NUMBERS.includes(ctx.from))
+        ) {
+          return;
+        }
+
+        // Verificar si el usuario está en la blacklist
+        if (ctx.blacklist && ctx.blacklist.includes(ctx.from)) {
+          logger.info("Ignoring message from blacklisted user", {
+            from: ctx.from,
+          });
           return;
         }
 
@@ -213,7 +339,13 @@ const main = async () => {
           from: ctx.from,
           message: ctx.body,
         });
-        await processAnyMessage(ctx, { flowDynamic, state, gotoFlow, endFlow });
+        await processAnyMessage(ctx, {
+          flowDynamic,
+          state,
+          gotoFlow,
+          endFlow,
+          bot: ctx.bot,
+        });
       },
     });
 
@@ -301,11 +433,36 @@ const main = async () => {
             bot.blacklist.add(number);
             logger.info("Number added to blacklist", { number });
           }
+          if (intent === "check") {
+            const isBlacklisted = bot.blacklist.includes(number);
+            logger.info("Blacklist check", { number, isBlacklisted });
+            res.writeHead(200, { "Content-Type": "application/json" });
+            return res.end(
+              JSON.stringify({ status: "ok", number, isBlacklisted })
+            );
+          }
 
           res.writeHead(200, { "Content-Type": "application/json" });
           return res.end(JSON.stringify({ status: "ok", number, intent }));
         } catch (error) {
           logger.error("Failed to process blacklist operation", error);
+          res.status(500).end("error");
+        }
+      })
+    );
+
+    // Agregar un endpoint para obtener la lista completa de números en blacklist
+    adapterProvider.server.get(
+      "/v1/blacklist",
+      handleCtx(async (bot, req, res) => {
+        logger.info("API request: Get blacklist");
+
+        try {
+          const blacklist = bot.blacklist.getAll();
+          res.writeHead(200, { "Content-Type": "application/json" });
+          return res.end(JSON.stringify({ status: "ok", blacklist }));
+        } catch (error) {
+          logger.error("Failed to get blacklist", error);
           res.status(500).end("error");
         }
       })
