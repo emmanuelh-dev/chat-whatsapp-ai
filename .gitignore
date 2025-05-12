@@ -8,3 +8,13 @@ db.json
 
 *.log
 *qr.png
+
+.env.local
+.env
+
+.env.test.local
+.env.test
+public/uploads/
+
+node_modules/
+node_modules
