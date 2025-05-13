@@ -16,8 +16,12 @@ import { logger } from "./utils/logger.js";
 import { getTypingDelay } from "./utils/contactUtils.js";
 import ConversationManager from "./ConversationManager.js";
 import { blacklist } from "./data/blacklist.js";
-import { searchPropertiesFromSupabase, formatSupabasePropertyResults } from "./utils/propertyUtils.js";
+import {
+  searchPropertiesFromSupabase,
+  formatSupabasePropertyResults,
+} from "./utils/propertyUtils.js";
 import { fetchActiveProperties } from "./services/propertyService.js";
+import { fetchWhatsAppContacts } from "./services/whatsappService.js";
 // Load environment variables
 dotenv.config();
 
@@ -55,7 +59,7 @@ async function getAIResponse(userId, prompt) {
   try {
     // Obtener propiedades activas desde Supabase
     const activeProperties = await fetchActiveProperties();
-    
+
     let systemPrompt = `Eres un asesor inmobiliario entusiasta y persuasivo. Tu objetivo es ayudar a los clientes a encontrar la propiedad perfecta.
 
     Reglas importantes:
@@ -128,9 +132,12 @@ async function processAnyMessage(ctx, ctxFunctions) {
     return;
   }
 
+  const supabaseBlacklist = await fetchWhatsAppContacts();
+
   // Verificar si el usuario está en la blacklist
   if (ctx.blacklist && ctx.blacklist.includes(userId)) {
     logger.info("Ignoring message from blacklisted user", { from: userId });
+    console.log(supabaseBlacklist);
     return;
   }
 
@@ -177,8 +184,19 @@ async function processAnyMessage(ctx, ctxFunctions) {
   }
 
   // Verificar si el mensaje contiene palabras clave relacionadas con propiedades
-  const propertyKeywords = ['casa', 'departamento', 'terreno', 'quinta', 'propiedad', 'inmueble', 'comprar', 'vender', 'rentar', 'alquilar'];
-  const messageContainsPropertyKeyword = propertyKeywords.some(keyword => 
+  const propertyKeywords = [
+    "casa",
+    "departamento",
+    "terreno",
+    "quinta",
+    "propiedad",
+    "inmueble",
+    "comprar",
+    "vender",
+    "rentar",
+    "alquilar",
+  ];
+  const messageContainsPropertyKeyword = propertyKeywords.some((keyword) =>
     ctx.body.toLowerCase().includes(keyword)
   );
 
@@ -186,7 +204,8 @@ async function processAnyMessage(ctx, ctxFunctions) {
     try {
       // Buscar propiedades que coincidan con la consulta
       const matchedProperties = await searchPropertiesFromSupabase(ctx.body);
-      const formattedResponse = formatSupabasePropertyResults(matchedProperties);
+      const formattedResponse =
+        formatSupabasePropertyResults(matchedProperties);
       await humanFlowDynamic({ flowDynamic }, formattedResponse);
       return;
     } catch (error) {
@@ -211,7 +230,11 @@ const welcomeFlow = addKeyword(EVENTS.WELCOME).addAction(
     console.log("addKeyword" + ctx);
 
     const userNumber = ctx.from.slice(-10);
-    if (blacklist.includes(userNumber)) {
+
+    const supabaseBlacklist = await fetchWhatsAppContacts();
+
+    
+    if (supabaseBlacklist.includes(userNumber)) {
       logger.info("Ignoring message from blacklisted user", {
         from: ctx.from,
         matchedNumber: userNumber,
@@ -344,6 +367,8 @@ const main = async () => {
         ) {
           return;
         }
+
+        const supabaseBlacklist = await fetchWhatsAppContacts();
 
         // Verificar si el usuario está en la blacklist
         if (ctx.blacklist && ctx.blacklist.includes(ctx.from)) {

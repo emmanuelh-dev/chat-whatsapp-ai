@@ -1,4 +1,4 @@
-import supabase from './supabaseClient';
+import supabase from './supabaseClient.js';
 
 // Función para obtener todos los contactos de WhatsApp
 export const fetchWhatsAppContacts = async () => {
@@ -8,7 +8,8 @@ export const fetchWhatsAppContacts = async () => {
       .select('*');
     
     if (error) throw error;
-    return data;
+    const formatted = data.map(contact =>contact.numero)
+    return formatted;
   } catch (error) {
     console.error('Error al obtener contactos de WhatsApp:', error);
     throw error;
