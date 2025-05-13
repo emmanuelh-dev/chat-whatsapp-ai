@@ -1,16 +1,18 @@
 import { createClient } from '@supabase/supabase-js';
+import dotenv from 'dotenv';
 
-// Obtener las variables de entorno
-const supabaseUrl = process.env.SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL;
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.REACT_APP_SUPABASE_ANON_KEY;
+// Cargar variables de entorno
+dotenv.config();
 
-// Verificar que las variables de entorno estén definidas
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('Error: Variables de entorno de Supabase no configuradas correctamente.');
-  console.error('Asegúrate de tener SUPABASE_URL y SUPABASE_ANON_KEY en tu archivo .env');
+// Crear cliente de Supabase usando las variables de entorno
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  console.error('Error: Variables de entorno SUPABASE_URL o SUPABASE_ANON_KEY no definidas');
 }
 
 // Crear y exportar el cliente de Supabase
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 export default supabase;
