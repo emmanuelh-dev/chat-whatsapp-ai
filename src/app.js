@@ -16,6 +16,8 @@ import { logger } from "./utils/logger.js";
 import { getTypingDelay } from "./utils/contactUtils.js";
 import ConversationManager from "./ConversationManager.js";
 import { blacklist } from "./data/blacklist.js";
+import { searchPropertiesFromSupabase, formatSupabasePropertyResults } from "./utils/propertyUtils.js";
+import { fetchActiveProperties } from "./services/propertyService.js";
 // Load environment variables
 dotenv.config();
 
@@ -51,6 +53,9 @@ async function getAIResponse(userId, prompt) {
 
   const startTime = Date.now();
   try {
+    // Obtener propiedades activas desde Supabase
+    const activeProperties = await fetchActiveProperties();
+    
     let systemPrompt = `Eres un asesor inmobiliario entusiasta y persuasivo. Tu objetivo es ayudar a los clientes a encontrar la propiedad perfecta.
 
     Reglas importantes:
@@ -64,7 +69,7 @@ async function getAIResponse(userId, prompt) {
     8. IMPORTANTE: No repitas "Puedo ayudarte a encontrar la propiedad ideal para ti" en cada mensaje
 
     Aquí tienes todas las propiedades disponibles. Utiliza la información relevante según la consulta del cliente:
-    ${JSON.stringify(properties)}`;
+    ${JSON.stringify(activeProperties)}`;
 
     const { text } = await generateText({
       model: openai("gpt-4o-mini"),
@@ -171,7 +176,26 @@ async function processAnyMessage(ctx, ctxFunctions) {
     }
   }
 
-  // Procesar el mensaje como consulta de texto
+  // Verificar si el mensaje contiene palabras clave relacionadas con propiedades
+  const propertyKeywords = ['casa', 'departamento', 'terreno', 'quinta', 'propiedad', 'inmueble', 'comprar', 'vender', 'rentar', 'alquilar'];
+  const messageContainsPropertyKeyword = propertyKeywords.some(keyword => 
+    ctx.body.toLowerCase().includes(keyword)
+  );
+
+  if (messageContainsPropertyKeyword) {
+    try {
+      // Buscar propiedades que coincidan con la consulta
+      const matchedProperties = await searchPropertiesFromSupabase(ctx.body);
+      const formattedResponse = formatSupabasePropertyResults(matchedProperties);
+      await humanFlowDynamic({ flowDynamic }, formattedResponse);
+      return;
+    } catch (error) {
+      logger.error("Error searching properties", error);
+      // Si hay error, continuamos con la respuesta de IA general
+    }
+  }
+
+  // Procesar el mensaje como consulta de texto general
   try {
     const aiResponse = await getAIResponse(userId, ctx.body);
     await humanFlowDynamic({ flowDynamic }, aiResponse);
