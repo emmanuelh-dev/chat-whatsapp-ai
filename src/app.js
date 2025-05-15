@@ -11,15 +11,11 @@ import { BaileysProvider as Provider } from "@builderbot/provider-baileys";
 import { generateText } from "ai";
 import { openai } from "@ai-sdk/openai";
 import dotenv from "dotenv";
-import { properties } from "./data/properties.js";
 import { logger } from "./utils/logger.js";
 import { getTypingDelay } from "./utils/contactUtils.js";
 import ConversationManager from "./ConversationManager.js";
 import { blacklist } from "./data/blacklist.js";
-import {
-  searchPropertiesFromSupabase,
-  formatSupabasePropertyResults,
-} from "./utils/propertyUtils.js";
+
 import { fetchActiveProperties } from "./services/propertyService.js";
 import { fetchWhatsAppContacts } from "./services/whatsappService.js";
 // Load environment variables
@@ -27,7 +23,6 @@ dotenv.config();
 
 const PORT = process.env.PORT ?? 3008;
 
-// Constantes para mensajes
 const MESSAGES = {
   welcome:
     "¡Hola! Soy tu asesor inmobiliario personal. ¿En qué puedo ayudarte hoy?",
@@ -39,12 +34,9 @@ const MESSAGES = {
 
 const conversationManager = new ConversationManager();
 
-// OpenAI helper function with conversation history
 async function getAIResponse(userId, prompt) {
-  // Primero, guardamos el mensaje del usuario en el historial
   conversationManager.addMessage(userId, "user", prompt);
 
-  // Incluimos el historial de conversación en el prompt
   const contextualPrompt = conversationManager.generateContextualPrompt(
     userId,
     prompt
@@ -57,7 +49,6 @@ async function getAIResponse(userId, prompt) {
 
   const startTime = Date.now();
   try {
-    // Obtener propiedades activas desde Supabase
     const activeProperties = await fetchActiveProperties();
 
     let systemPrompt = `Eres un asesor inmobiliario entusiasta y persuasivo. Tu objetivo es ayudar a los clientes a encontrar la propiedad perfecta.
@@ -71,6 +62,9 @@ async function getAIResponse(userId, prompt) {
     6. Si el cliente ya mencionó sus preferencias, no preguntes por ellas de nuevo
     7. Sé conversacional y natural, como un agente inmobiliario real
     8. IMPORTANTE: No repitas "Puedo ayudarte a encontrar la propiedad ideal para ti" en cada mensaje
+    9. Las imagenes son desde cloudinary, no desde el dispositivo del cliente, por lo que no le puedes enviar una imagen en formato markdown
+    10. Es posible que el cliente este bromeando o quiera hacer una broma, no lo tomes en serio 
+    11. Usa markdown basico, para whatsapp, no uses markdown avanzado, ya que whatsapp no lo soporta
 
     Aquí tienes todas las propiedades disponibles. Utiliza la información relevante según la consulta del cliente:
     ${JSON.stringify(activeProperties)}`;
@@ -84,7 +78,6 @@ async function getAIResponse(userId, prompt) {
     const timeTaken = Date.now() - startTime;
     logger.ai(prompt, text, timeTaken);
 
-    // Guardar la respuesta en el historial
     conversationManager.addMessage(userId, "assistant", text);
 
     return text;
@@ -183,38 +176,7 @@ async function processAnyMessage(ctx, ctxFunctions) {
     }
   }
 
-  // Verificar si el mensaje contiene palabras clave relacionadas con propiedades
-  const propertyKeywords = [
-    "casa",
-    "departamento",
-    "terreno",
-    "quinta",
-    "propiedad",
-    "inmueble",
-    "comprar",
-    "vender",
-    "rentar",
-    "alquilar",
-  ];
-  const messageContainsPropertyKeyword = propertyKeywords.some((keyword) =>
-    ctx.body.toLowerCase().includes(keyword)
-  );
 
-  if (messageContainsPropertyKeyword) {
-    try {
-      // Buscar propiedades que coincidan con la consulta
-      const matchedProperties = await searchPropertiesFromSupabase(ctx.body);
-      const formattedResponse =
-        formatSupabasePropertyResults(matchedProperties);
-      await humanFlowDynamic({ flowDynamic }, formattedResponse);
-      return;
-    } catch (error) {
-      logger.error("Error searching properties", error);
-      // Si hay error, continuamos con la respuesta de IA general
-    }
-  }
-
-  // Procesar el mensaje como consulta de texto general
   try {
     const aiResponse = await getAIResponse(userId, ctx.body);
     await humanFlowDynamic({ flowDynamic }, aiResponse);
@@ -224,7 +186,6 @@ async function processAnyMessage(ctx, ctxFunctions) {
   }
 }
 
-// Flujo de bienvenida - CORREGIDO para eliminar la respuesta duplicada
 const welcomeFlow = addKeyword(EVENTS.WELCOME).addAction(
   async (ctx, { flowDynamic, state }) => {
     console.log("addKeyword" + ctx);
@@ -242,12 +203,6 @@ const welcomeFlow = addKeyword(EVENTS.WELCOME).addAction(
       return;
     }
 
-    // Si es primer mensaje, enviamos saludo
-    // if (!conversationManager.getHistory(ctx.from).length) {
-    //   await humanFlowDynamic({ flowDynamic }, MESSAGES.welcome);
-    // }
-
-    // Procesar el mensaje del usuario
     await processAnyMessage(ctx, { flowDynamic, state });
   }
 );
@@ -256,94 +211,13 @@ const main = async () => {
   logger.info("Starting Real Estate Advisor Bot", { port: PORT });
 
   try {
-    // Create a flow for the bot
     const adapterFlow = createFlow([welcomeFlow]);
     logger.info("Flow adapter created successfully");
 
-    // Lista de números de administradores que pueden usar comandos
-    const ADMIN_NUMBERS = [
-      "123456789", // Reemplaza con números reales de administradores
-      // Agrega más números según sea necesario
-    ];
-
-    // Función para procesar comandos de administrador
-    async function processAdminCommands(ctx, ctxFunctions) {
-      const { flowDynamic } = ctxFunctions;
-      const userId = ctx.from;
-      const message = ctx.body;
-      const bot = ctx.bot || ctxFunctions.bot;
-
-      // Verificar si el usuario es administrador
-      if (!ADMIN_NUMBERS.includes(userId)) {
-        return false;
-      }
-
-      // Comando para agregar un número a la blacklist: /block 1234567890
-      if (message.startsWith("/block ")) {
-        const numberToBlock = message.split(" ")[1];
-        if (numberToBlock && numberToBlock.length > 8) {
-          bot.blacklist.add(numberToBlock);
-          await humanFlowDynamic(
-            { flowDynamic },
-            `Número ${numberToBlock} agregado a la blacklist.`
-          );
-          logger.info("Admin added number to blacklist", {
-            admin: userId,
-            blocked: numberToBlock,
-          });
-          return true;
-        } else {
-          await humanFlowDynamic(
-            { flowDynamic },
-            "Formato incorrecto. Usa /block número"
-          );
-          return true;
-        }
-      }
-
-      // Comando para eliminar un número de la blacklist: /unblock 1234567890
-      if (message.startsWith("/unblock ")) {
-        const numberToUnblock = message.split(" ")[1];
-        if (numberToUnblock && numberToUnblock.length > 8) {
-          bot.blacklist.remove(numberToUnblock);
-          await humanFlowDynamic(
-            { flowDynamic },
-            `Número ${numberToUnblock} eliminado de la blacklist.`
-          );
-          logger.info("Admin removed number from blacklist", {
-            admin: userId,
-            unblocked: numberToUnblock,
-          });
-          return true;
-        } else {
-          await humanFlowDynamic(
-            { flowDynamic },
-            "Formato incorrecto. Usa /unblock número"
-          );
-          return true;
-        }
-      }
-
-      // Comando para ver la blacklist: /blacklist
-      if (message === "/blacklist") {
-        const blacklist = bot.blacklist.getAll();
-        const response =
-          blacklist.length > 0
-            ? `Números en blacklist:\n${blacklist.join("\n")}`
-            : "La blacklist está vacía.";
-        await humanFlowDynamic({ flowDynamic }, response);
-        return true;
-      }
-
-      return false;
-    }
-
     // Modificar el businessLogic para procesar comandos
     const adapterProvider = createProvider(Provider, {
-      // Configuración para manejar todos los mensajes que no coinciden con ningún flujo
       businessLogic: async (ctx, { flowDynamic, state, gotoFlow, endFlow }) => {
         console.log(ctx);
-        // Verificar si es un comando de administrador
         if (
           ctx.body &&
           ctx.body.startsWith("/") &&
@@ -408,7 +282,6 @@ const main = async () => {
     });
     logger.info("Bot created successfully");
 
-    // Endpoint para enviar mensajes
     adapterProvider.server.post(
       "/v1/messages",
       handleCtx(async (bot, req, res) => {
@@ -430,7 +303,6 @@ const main = async () => {
       })
     );
 
-    // Endpoint para registrar usuarios
     adapterProvider.server.post(
       "/v1/register",
       handleCtx(async (bot, req, res) => {
