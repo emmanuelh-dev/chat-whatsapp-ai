@@ -1,5 +1,5 @@
-import supabase from './supabaseClient.js';
-import { logger } from '../utils/logger.js';
+import supabase from "./supabaseClient.js";
+import { logger } from "../utils/logger.js";
 
 /**
  * Obtiene todas las propiedades activas de Supabase
@@ -8,18 +8,33 @@ import { logger } from '../utils/logger.js';
 export async function fetchActiveProperties() {
   try {
     const { data, error } = await supabase
-      .from('propiedades')  // Asumiendo que la tabla se llama 'propiedades'
-      .select('*')
-      .eq('activa', true);  // Filtrando solo propiedades activas
-    
+      .from("propiedades") // Asumiendo que la tabla se llama 'propiedades'
+      .select("*")
+      .eq("activa", true); // Filtrando solo propiedades activas
+
     if (error) {
-      logger.error('Error al obtener propiedades activas de Supabase', error);
+      logger.error("Error al obtener propiedades activas de Supabase", error);
       return [];
     }
-    
+
     return data || [];
   } catch (error) {
-    logger.error('Error en fetchActiveProperties', error);
+    logger.error("Error en fetchActiveProperties", error);
+    return [];
+  }
+}
+
+export async function fetchAditionalInstructions() {
+  try {
+    const { data, error } = await supabase
+      .from("instruccionesAdicionales")
+      .select("*");
+
+    if (error) return [];
+
+    return data;
+  } catch (error) {
+    logger.error("Error en fetchAditionalInstructions", error);
     return [];
   }
 }
@@ -31,46 +46,43 @@ export async function fetchActiveProperties() {
  */
 export async function searchProperties(criteria = {}) {
   try {
-    let query = supabase
-      .from('propiedades')
-      .select('*')
-      .eq('activa', true);  // Siempre filtramos por propiedades activas
-    
+    let query = supabase.from("propiedades").select("*").eq("activa", true); // Siempre filtramos por propiedades activas
+
     // Aplicar filtros según los criterios proporcionados
     if (criteria.tipopropiedad) {
-      query = query.ilike('tipo_propiedad', `%${criteria.tipopropiedad}%`);
+      query = query.ilike("tipo_propiedad", `%${criteria.tipopropiedad}%`);
     }
-    
+
     if (criteria.ubicacion) {
-      query = query.ilike('ubicacion', `%${criteria.ubicacion}%`);
+      query = query.ilike("ubicacion", `%${criteria.ubicacion}%`);
     }
-    
+
     if (criteria.precioMin) {
-      query = query.gte('precio', criteria.precioMin);
+      query = query.gte("precio", criteria.precioMin);
     }
-    
+
     if (criteria.precioMax) {
-      query = query.lte('precio', criteria.precioMax);
+      query = query.lte("precio", criteria.precioMax);
     }
-    
+
     if (criteria.habitaciones) {
-      query = query.eq('habitaciones', criteria.habitaciones);
+      query = query.eq("habitaciones", criteria.habitaciones);
     }
-    
+
     if (criteria.banos) {
-      query = query.eq('banos', criteria.banos);
+      query = query.eq("banos", criteria.banos);
     }
-    
+
     const { data, error } = await query;
-    
+
     if (error) {
-      logger.error('Error al buscar propiedades en Supabase', error);
+      logger.error("Error al buscar propiedades en Supabase", error);
       return [];
     }
-    
+
     return data || [];
   } catch (error) {
-    logger.error('Error en searchProperties', error);
+    logger.error("Error en searchProperties", error);
     return [];
   }
 }
@@ -83,16 +95,16 @@ export async function searchProperties(criteria = {}) {
 export async function getPropertyById(id) {
   try {
     const { data, error } = await supabase
-      .from('propiedades')
-      .select('*')
-      .eq('id', id)
+      .from("propiedades")
+      .select("*")
+      .eq("id", id)
       .single();
-    
+
     if (error) {
       logger.error(`Error al obtener propiedad con ID ${id}`, error);
       return null;
     }
-    
+
     return data;
   } catch (error) {
     logger.error(`Error en getPropertyById para ID ${id}`, error);
