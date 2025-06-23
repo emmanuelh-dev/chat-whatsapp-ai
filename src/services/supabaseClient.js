@@ -10,6 +10,7 @@ const supabaseKey = process.env.SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseKey) {
   console.error('Error: Variables de entorno SUPABASE_URL o SUPABASE_ANON_KEY no definidas');
+  throw new Error('Variables de entorno SUPABASE_URL o SUPABASE_ANON_KEY no definidas');
 }
 
 // Crear y exportar el cliente de Supabase

@@ -14,7 +14,6 @@ export function searchPropertiesInText(text) {
   if (!text) return [];
   
   const lowerText = text.toLowerCase();
-  const results = [];
   
   // Buscar por tipo de propiedad
   const propertyTypes = ['casa', 'departamento', 'terreno', 'quinta'];

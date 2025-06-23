@@ -106,16 +106,16 @@ function handleBlacklistOperation(bot, number, intent, res) {
     case "remove":
       bot.blacklist.remove(number);
       logger.info("Number removed from blacklist", { number });
-      break;
-    case "add":
+      break;    case "add":
       bot.blacklist.add(number);
       logger.info("Number added to blacklist", { number });
       break;
-    case "check":
+    case "check": {
       const isBlacklisted = bot.blacklist.includes(number);
       logger.info("Blacklist check", { number, isBlacklisted });
       res.writeHead(200, { "Content-Type": "application/json" });
       return res.end(JSON.stringify({ status: "ok", number, isBlacklisted }));
+    }
   }
 
   res.writeHead(200, { "Content-Type": "application/json" });

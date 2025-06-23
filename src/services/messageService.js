@@ -14,7 +14,7 @@ export async function humanFlowDynamic(ctx, message, options = {}) {
   return flowDynamic(message);
 }
 
-export async function analyzePropertyImageWithAI(imageData) {
+export async function analyzePropertyImageWithAI() {
   try {
     return {
       text: "He analizado la imagen de la propiedad. Se ve como una propiedad en buen estado. ¿Te gustaría saber más detalles sobre propiedades similares?",
