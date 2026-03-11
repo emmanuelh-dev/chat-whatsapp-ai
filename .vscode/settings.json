@@ -1,0 +1,8 @@
+{
+  "chat.tools.terminal.autoApprove": {
+    "/^cd /Users/emmanuel/Documents/GitHub/chat-whatsapp-ai && node --check src/app\\.js && node --check src/routes/api\\.js && node --check src/modules/sessions/WhatsAppSessionManager\\.js && node --check src/modules/sessions/db/postgresClient\\.js && node --check src/modules/sessions/db/initSchema\\.js && node --check src/modules/sessions/repositories/sessionRepository\\.js && node --check src/modules/sessions/repositories/chatRepository\\.js && node --check src/modules/sessions/createSessionManager\\.js$/": {
+      "approve": true,
+      "matchCommandLine": true
+    }
+  }
+}

@@ -2,9 +2,16 @@ import { generateText } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { fetchActiveProperties, fetchAditionalInstructions } from './propertyService.js';
 import { logger } from '../utils/logger.js';
-import { MESSAGES } from '../config/botConfig.js';
+
+const FALLBACK_RESPONSE = 'basinga';
 
 async function getAIResponse(userId, prompt, conversationManager, userName = null) {
+  if (!process.env.OPENAI_API_KEY) {
+    logger.warn('OPENAI_API_KEY no configurada, usando fallback');
+    conversationManager.addMessage(userId, 'assistant', FALLBACK_RESPONSE);
+    return FALLBACK_RESPONSE;
+  }
+
   conversationManager.addMessage(userId, "user", prompt);
   const contextualPrompt = conversationManager.generateContextualPrompt(userId, prompt);
 
@@ -32,7 +39,8 @@ async function getAIResponse(userId, prompt, conversationManager, userName = nul
   } catch (error) {
     const timeTaken = Date.now() - startTime;
     logger.error(`OpenAI request failed after ${timeTaken}ms`, error);
-    return MESSAGES.error;
+    conversationManager.addMessage(userId, 'assistant', FALLBACK_RESPONSE);
+    return FALLBACK_RESPONSE;
   }
 }
 

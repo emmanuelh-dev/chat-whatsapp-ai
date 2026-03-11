@@ -9,11 +9,12 @@ const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseKey) {
-  console.error('Error: Variables de entorno SUPABASE_URL o SUPABASE_ANON_KEY no definidas');
-  throw new Error('Variables de entorno SUPABASE_URL o SUPABASE_ANON_KEY no definidas');
+  console.warn('SUPABASE_URL o SUPABASE_ANON_KEY no definidas. Supabase queda deshabilitado en este entorno.');
 }
 
 // Crear y exportar el cliente de Supabase
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabase = supabaseUrl && supabaseKey
+  ? createClient(supabaseUrl, supabaseKey)
+  : null;
 
 export default supabase;

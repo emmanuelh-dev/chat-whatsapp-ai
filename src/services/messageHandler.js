@@ -5,6 +5,14 @@ import { getAIResponse } from './aiService.js';
 import { fetchWhatsAppContacts } from './whatsappService.js';
 import { blacklist } from '../data/blacklist.js';
 import { MESSAGES } from '../config/botConfig.js';
+import {
+  activateHumanHandoff,
+  isHumanHandoffActive,
+  refreshHumanHandoff,
+  shouldActivateHumanHandoff,
+} from './humanHandoffService.js';
+
+const HUMAN_HANDOFF_MESSAGE = 'Una persona te responderá en breve.';
 
 export async function processMessage(ctx, ctxFunctions, conversationManager) {
   const { flowDynamic } = ctxFunctions;
@@ -22,11 +30,42 @@ export async function processMessage(ctx, ctxFunctions, conversationManager) {
 
   logger.info("Processing message", { from: userId, name: userName, message: ctx.body });
 
+  if (await handleHumanHandoffMessage(ctx, flowDynamic, userId)) {
+    return;
+  }
+
   if (await handleMediaMessage(ctx, flowDynamic)) {
     return;
   }
 
   await handleTextMessage(ctx, flowDynamic, userId, conversationManager);
+}
+
+async function handleHumanHandoffMessage(ctx, flowDynamic, userId) {
+  const message = ctx.body || '';
+
+  if (shouldActivateHumanHandoff(message)) {
+    activateHumanHandoff(userId);
+    await humanFlowDynamic(
+      { flowDynamic },
+      HUMAN_HANDOFF_MESSAGE,
+      { delay: 300, to: userId }
+    );
+    return true;
+  }
+
+  if (!isHumanHandoffActive(userId)) {
+    return false;
+  }
+
+  refreshHumanHandoff(userId);
+  await humanFlowDynamic(
+    { flowDynamic },
+    HUMAN_HANDOFF_MESSAGE,
+    { delay: 300, to: userId }
+  );
+
+  return true;
 }
 
 async function shouldIgnoreMessage(ctx, userId) {

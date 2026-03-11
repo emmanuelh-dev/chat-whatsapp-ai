@@ -1,5 +1,6 @@
 import { logger } from '../utils/logger.js';
 import { getTypingDelay } from '../utils/contactUtils.js';
+import { enqueueOutboundMessage } from './outboundQueueService.js';
 
 export async function humanFlowDynamic(ctx, message, options = {}) {
   const { flowDynamic } = ctx;
@@ -11,7 +12,14 @@ export async function humanFlowDynamic(ctx, message, options = {}) {
 
   const delay = options.delay || getTypingDelay(message);
   await new Promise((resolve) => setTimeout(resolve, delay));
-  return flowDynamic(message);
+
+  return enqueueOutboundMessage(
+    () => flowDynamic(message),
+    {
+      channel: 'builderbot-flow',
+      to: options.to ?? 'unknown',
+    }
+  );
 }
 
 export async function analyzePropertyImageWithAI() {

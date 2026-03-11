@@ -1,6 +1,4 @@
 import dotenv from "dotenv";
-import { JsonFileDB as Database } from "@builderbot/database-json";
-import { BaileysProvider as Provider } from "@builderbot/provider-baileys";
 
 dotenv.config();
 
@@ -14,8 +12,3 @@ export const MESSAGES = {
   error: (name) => name ? `Lo siento ${name}, tuve un problema al procesar tu mensaje. ¿Podrías intentarlo de nuevo?` :
     "Lo siento, tuve un problema al procesar tu mensaje. ¿Podrías intentarlo de nuevo?",
 };
-
-export const createBotConfig = () => ({
-  provider: Provider,
-  database: new Database({ filename: "db.json" })
-});

@@ -3,6 +3,10 @@ import supabase from './supabaseClient.js';
 // Función para obtener todos los contactos de WhatsApp
 export const fetchWhatsAppContacts = async () => {
   try {
+    if (!supabase) {
+      return [];
+    }
+
     const { data, error } = await supabase
       .from('watsapps')
       .select('*');
@@ -19,6 +23,10 @@ export const fetchWhatsAppContacts = async () => {
 // Función para agregar un nuevo contacto de WhatsApp
 export const addWhatsAppContact = async (contact) => {
   try {
+    if (!supabase) {
+      throw new Error('Supabase no está configurado');
+    }
+
     const { data, error } = await supabase
       .from('watsapps')
       .insert([contact])
@@ -35,6 +43,10 @@ export const addWhatsAppContact = async (contact) => {
 // Función para verificar si un número ya existe
 export const checkNumberExists = async (numero) => {
   try {
+    if (!supabase) {
+      return false;
+    }
+
     const { data, error } = await supabase
       .from('watsapps')
       .select('*')
